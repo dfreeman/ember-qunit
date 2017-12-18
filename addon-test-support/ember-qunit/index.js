@@ -223,6 +223,43 @@ export function setupEmberOnerrorValidation() {
 }
 
 /**
+  Ensures unhandled native promise rejections are tracked and fail tests
+  properly.  This brings native promise rejections in line with
+  Ember.RSVP.Promise rejections (which already have this behavior).
+
+  Please note: This only works on Chrome (other browsers simply never hit this
+  code) since the `unhandledrejection` event is only fired on Chrome (>= 49).
+ */
+export function setupUnhandledRejectionHandler() {
+  // only needed until https://github.com/qunitjs/qunit/pull/1241 lands and is
+  // included in a release that ember-qunit can depend upon
+
+  // Listen for unhandled rejections, and call QUnit.onError.
+  window.addEventListener('unhandledrejection', __unhandledRejectionHandler__);
+}
+
+export function __unhandledRejectionHandler__(event) {
+  let { reason } = event;
+  let resultInfo = {
+    result: false,
+    message: reason.message || 'error',
+    actual: reason,
+    source: reason.stack,
+  };
+
+  let currentTest = QUnit.config.current;
+  if (currentTest) {
+    currentTest.assert.pushResult(resultInfo);
+  } else {
+    let test = assert => {
+      assert.pushResult(resultInfo);
+    };
+    test.validTest = true;
+    QUnit.test('global failure', test);
+  }
+}
+
+/**
    @method start
    @param {Object} [options] Options to be used for enabling/disabling behaviors
    @param {Boolean} [options.loadTests] If `false` tests will not be loaded automatically.
@@ -237,6 +274,8 @@ export function setupEmberOnerrorValidation() {
    back to `false` after each test will.
    @param {Boolean} [options.setupEmberOnerrorValidation] If `false` validation
    of `Ember.onerror` will be disabled.
+   @param {Boolean} [options.setupUnhandledRejectionHandler=true] Adds an `unhandledRejection` event listener
+   that will cause your test suite to fail for any unhandled native promise rejections.
  */
 export function start(options = {}) {
   if (options.loadTests !== false) {
@@ -257,6 +296,10 @@ export function start(options = {}) {
 
   if (options.setupEmberOnerrorValidation !== false) {
     setupEmberOnerrorValidation();
+  }
+
+  if (options.setupUnhandledRejectionHandler !== false) {
+    setupUnhandledRejectionHandler();
   }
 
   if (options.startTests !== false) {
